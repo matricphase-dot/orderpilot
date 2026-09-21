@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: OrderPilot API
+  version: 1.0.0
+  description: E-commerce order management REST API — place, update, cancel and track orders. SQLite + Express. Auth via `Authorization: Bearer <token>` (register/login returns a token).
+servers: [{ url: http://localhost:4000/api }]
+tags:
+  - { name: auth }
+  - { name: products }
+  - { name: orders }
+  - { name: tracking }
+  - { name: stats }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    Shipping:
+      type: object
+      required: [name, phone, address, city, state, pincode]
+      properties:
+        name: { type: string }
+        phone: { type: string, pattern: '^[6-9]\d{9}$' }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        pincode: { type: string, pattern: '^[1-9]\d{5}$' }
+    CartLine:
+      type: object
+      properties: { productId: { type: integer }, qty: { type: integer, minimum: 1, maximum: 99 } }
+    PlaceOrder:
+      type: object
+      required: [items, paymentMethod, shipping]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CartLine' } }
+        coupon: { type: string, example: FIRST10 }
+        paymentMethod: { type: string, enum: [UPI, CARD, NETBANKING, COD] }
+        shipping: { $ref: '#/components/schemas/Shipping' }
+        notes: { type: string, maxLength: 400 }
+    Error:
+      type: object
+      properties: { error: { type: string }, field: { type: string, nullable: true } }
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        order_number: { type: string, example: OP-2026-001 }
+        status: { type: string, enum: [PENDING, CONFIRMED, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED] }
+        payment_method: { type: string }
+        payment_status: { type: string, enum: [PENDING_PAYMENT, PAID, REFUNDED] }
+        subtotal: { type: number }
+        discount: { type: number }
+        shipping_fee: { type: number }
+        tax: { type: number }
+        cod_fee: { type: number }
+        total: { type: number }
+        awb: { type: string, nullable: true }
+        carrier: { type: string, nullable: true }
+        items: { type: array, items: { type: object } }
+        events: { type: array, items: { type: object, properties: { status: { type: string }, message: { type: string }, created_at: { type: string } } } }
+        next_statuses: { type: array, items: { type: string } }
+        can_cancel: { type: boolean }
+        can_edit: { type: boolean }
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Create a customer account
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, email, password], properties: { name: { type: string }, email: { type: string }, phone: { type: string }, password: { type: string, minLength: 6 } } } } } }
+      responses: { '201': { description: user + token }, '409': { description: email taken }, '422': { description: validation } }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Sign in
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { email: { type: string }, password: { type: string } } } } } }
+      responses: { '200': { description: user + token }, '401': { description: invalid credentials } }
+  /auth/me:
+    get: { tags: [auth], security: [{ bearerAuth: [] }], summary: Current profile, responses: { '200': { description: ok }, '401': { description: unauthorized } } }
+  /products:
+    get:
+      tags: [products]
+      summary: Browse catalog
+      parameters:
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: sort, schema: { type: string, enum: [price_asc, price_desc, name] } }
+      responses: { '200': { description: item list } }
+    post:
+      tags: [products]
+      security: [{ bearerAuth: [] }]
+      summary: Create product (admin)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [sku, name, price], properties: { sku: { type: string }, name: { type: string }, price: { type: number }, stock: { type: integer }, category: { type: string }, emoji: { type: string }, accent: { type: string }, description: { type: string } } } } } }
+      responses: { '201': { description: created }, '403': { description: admin only }, '409': { description: duplicate sku } }
+  /products/categories:
+    get: { tags: [products], summary: Facet counts, responses: { '200': { description: ok } } }
+  /products/{id}:
+    parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
+    get: { tags: [products], summary: Product detail, responses: { '200': { description: ok }, '404': { description: not found } } }
+    patch:
+      tags: [products]
+      security: [{ bearerAuth: [] }]
+      summary: Update product (admin)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { price: { type: number }, stock: { type: integer }, name: { type: string }, active: { type: boolean } } } } } }
+      responses: { '200': { description: ok }, '403': { description: admin only } }
+  /orders/quote:
+    post:
+      tags: [orders]
+      summary: Server-side cart pricing (coupons, GST 5%, free shipping ≥ ₹4999, COD +₹25)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/CartLine' } }, coupon: { type: string }, paymentMethod: { type: string } } } } } }
+      responses: { '200': { description: quote }, '409': { description: insufficient stock }, '422': { description: invalid coupon/cart } }
+  /orders:
+    post:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: Place order — validates stock, prices server-side, decrements inventory atomically, opens tracking trail
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceOrder' } } } }
+      responses: { '201': { description: order created, content: { application/json: { schema: { type: object, properties: { order: { $ref: '#/components/schemas/Order' } } } } } }, '401': { description: auth }, '409': { description: out of stock }, '422': { description: validation } }
+    get:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: List orders (customer=own, admin=all) with filters
+      parameters:
+        - { in: query, name: status, schema: { type: string, enum: [PENDING, CONFIRMED, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED] } }
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 10 } }
+      responses: { '200': { description: page } }
+  /orders/{id}:
+    parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
+    get:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: Order detail with items + events
+      responses: { '200': { description: ok }, '403': { description: not yours }, '404': { description: not found } }
+    patch:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: Update shipping/notes while PENDING or CONFIRMED (admin may set carrier/AWB anytime pre-delivery)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { shipping: { $ref: '#/components/schemas/Shipping' }, notes: { type: string }, carrier: { type: string }, awb: { type: string } } } } } }
+      responses: { '200': { description: updated }, '409': { description: locked by status } }
+  /orders/{id}/cancel:
+    post:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: Cancel order (allowed before SHIPPED). Restocks inventory, marks refund initiated.
+      parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses: { '200': { description: cancelled }, '409': { description: too late to cancel } }
+  /orders/{id}/status:
+    patch:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: Advance lifecycle (admin only, FSM-validated). Generates AWB at SHIPPED; auto-refund + restock at CANCELLED.
+      parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [CONFIRMED, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED] }, note: { type: string }, carrier: { type: string }, awb: { type: string } } } } } }
+      responses: { '200': { description: moved }, '409': { description: illegal transition } }
+  /orders/track/{orderNumber}:
+    get:
+      tags: [tracking]
+      summary: Public tracking. Masked summary unless `verify` matches registered email/phone/pincode.
+      parameters:
+        - { in: path, name: orderNumber, required: true, schema: { type: string, example: OP-2026-001 } }
+        - { in: query, name: verify, schema: { type: string } }
+      responses: { '200': { description: tracking view }, '404': { description: unknown order } }
+  /stats/overview:
+    get: { tags: [stats], security: [{ bearerAuth: [] }], summary: KPI totals + status counts + catalog health, responses: { '200': { description: ok } } }
+  /stats/revenue-daily:
+    get:
+      tags: [stats]
+      security: [{ bearerAuth: [] }]
+      summary: Daily revenue series
+      parameters: [{ in: query, name: days, schema: { type: integer, default: 14, maximum: 60 } }]
+      responses: { '200': { description: ok } }
+  /stats/top-products:
+    get: { tags: [stats], security: [{ bearerAuth: [] }], summary: Best sellers by revenue, responses: { '200': { description: ok } } }
+  /stats/funnel:
+    get: { tags: [stats], security: [{ bearerAuth: [] }], summary: Orders that reached each stage, responses: { '200': { description: ok } } }
