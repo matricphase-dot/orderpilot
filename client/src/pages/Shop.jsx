@@ -6,7 +6,7 @@ import { useApp } from '../store.jsx';
 import { Skeleton } from '../components/ui.jsx';
 
 export default function Shop() {
-  const { user, addToCart, inCart, toast, cartCount } = useApp();
+  const { user, addToCart, inCart, toast, cartCount, setCartOpen } = useApp();
   const nav = useNavigate();
   const [products, setProducts] = useState(null);
   const [cats, setCats] = useState([]);
@@ -40,7 +40,7 @@ export default function Shop() {
         <div className="row mt16 wrapline">
           {!user && <button className="btn primary" onClick={() => nav('/auth')}>Create an account — it's instant</button>}
           <button className="btn" onClick={() => nav('/track')}>📮 Track an order</button>
-          {cartCount > 0 && user && <button className="btn ok" onClick={() => nav('/orders')}>You have {cartCount} item{cartCount > 1 ? 's' : ''} in cart</button>}
+          {cartCount > 0 && user && <button className="btn ok" onClick={() => setCartOpen(true)}>🧺 Review cart ({cartCount}) →</button>}
           <span className="small faint hide-sm" style={{ marginLeft: 'auto' }}>Try code <span className="kbd">FIRST10</span> at checkout</span>
         </div>
       </section>
@@ -50,9 +50,9 @@ export default function Shop() {
           <button className={`chip chip-btn ${!cat ? 'on' : ''}`} onClick={() => setCat('')}>All</button>
           {cats.map((c) => <button key={c.category} className={`chip chip-btn ${cat === c.category ? 'on' : ''}`} onClick={() => setCat(c.category === cat ? '' : c.category)}>{icon(c.category)} {c.category} <span className="faint">{c.n}</span></button>)}
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <input className="input" style={{ width: 200 }} placeholder="🔍 search products…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="select" style={{ width: 150 }} value={sort} onChange={(e) => setSort(e.target.value)}>
+        <div className="row filters" style={{ gap: 8 }}>
+          <input className="input" placeholder="🔍 search products…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className="select" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="">Featured</option><option value="price_asc">Price ↑</option><option value="price_desc">Price ↓</option><option value="name">Name A–Z</option>
           </select>
         </div>

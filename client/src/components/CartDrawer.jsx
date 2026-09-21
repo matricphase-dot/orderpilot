@@ -44,7 +44,7 @@ export default function CartDrawer({ onClose }) {
   }, [items, applied, pay]); // eslint-disable-line
 
   if (!token) {
-    return <Backdrop onClose={onClose}><Drawer title="Your cart 🧺"><div style={{ textAlign: 'center', padding: '46px 10px' }}>
+    return <Backdrop onClose={onClose}><Drawer title="Your cart 🧺" onClose={onClose}><div style={{ textAlign: 'center', padding: '46px 10px' }}>
       <div style={{ fontSize: 40 }}>🔐</div><p className="sub" style={{ margin: '12px 0 18px' }}>Sign in to start a cart and place orders.</p>
       <button className="btn primary" onClick={() => { onClose(); nav('/auth'); }}>Sign in →</button>
     </div></Drawer></Backdrop>;
@@ -81,7 +81,7 @@ export default function CartDrawer({ onClose }) {
 
   return (
     <Backdrop onClose={onClose}>
-      <Drawer title={step === 'cart' ? 'Your cart 🧺' : step === 'checkout' ? 'Checkout 🧾' : 'Order placed 🎉'} onBack={step !== 'cart' && step !== 'done' ? () => setStep('cart') : undefined}>
+      <Drawer title={step === 'cart' ? 'Your cart 🧺' : step === 'checkout' ? 'Checkout 🧾' : 'Order placed 🎉'} onBack={step === 'checkout' ? () => setStep('cart') : undefined} onClose={onClose} hideClose={step === 'done'}>
         {step === 'cart' && (
           cart.length === 0 ? <div style={{ textAlign: 'center', padding: '50px 10px' }}><div style={{ fontSize: 40 }}>🛒</div><p className="sub" style={{ margin: '12px 0 18px' }}>Nothing here yet — add some gear!</p><button className="btn" onClick={onClose}>Browse shop</button></div> :
           <>
@@ -173,11 +173,11 @@ function QuoteBox({ quote, quoting }) {
 }
 
 const Backdrop = ({ children, onClose }) => <><div className="scrim" onClick={onClose} />{children}</>;
-const Drawer = ({ title, children, onBack }) => (
+const Drawer = ({ title, children, onBack, onClose, hideClose }) => (
   <aside className="drawer">
     <div className="drawer-head">
       <div className="row">{onBack && <button className="btn ghost xs" onClick={onBack}>←</button>}<b style={{ fontSize: 15.5 }}>{title}</b></div>
-      <button className="btn ghost xs" onClick={children && title.includes('🎉') ? undefined : onClose} style={{ visibility: title.includes('🎉') ? 'hidden' : undefined }}>✕</button>
+      {!hideClose && <button className="btn ghost xs" onClick={onClose}>✕</button>}
     </div>
     <div className="drawer-body">{children}</div>
   </aside>

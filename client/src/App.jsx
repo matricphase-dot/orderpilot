@@ -1,6 +1,22 @@
 // OrderPilot — app shell: routing, nav, cart drawer, toasts
-import { useState } from 'react';
-import { Routes, Route, NavLink, useNavigate, Navigate } from 'react-router-dom';
+import { Component } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+
+class ErrorBoundary extends Component {
+  state = { err: null };
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div className="card" style={{ padding: 34, textAlign: 'center', marginTop: 40 }}>
+        <div style={{ fontSize: 42 }}>🛠️</div>
+        <h2 className="h2 mt10">Something broke in this view</h2>
+        <p className="sub mt8 mono" style={{ fontSize: 12 }}>{String(this.state.err.message || this.state.err).slice(0, 220)}</p>
+        <button className="btn primary mt16" onClick={() => location.reload()}>Reload app</button>
+      </div>
+    );
+  }
+}
 import { useApp } from './store.jsx';
 import { Toasts } from './components/ui.jsx';
 import Nav from './components/Nav.jsx';
@@ -16,8 +32,7 @@ import AdminOrders from './pages/admin/AdminOrders.jsx';
 import AdminProducts from './pages/admin/AdminProducts.jsx';
 
 export default function App() {
-  const { booted, isAdmin, toasts, dismissToast, cartCount } = useApp();
-  const [cartOpen, setCartOpen] = useState(false);
+  const { booted, isAdmin, toasts, dismissToast, cartCount, cartOpen, setCartOpen } = useApp();
 
   if (!booted) return <div style={{ display: 'grid', placeItems: 'center', height: '100vh' }}><div className="row" style={{ gap: 12, color: '#8b94ad' }}><span className="spin" /> Booting OrderPilot…</div></div>;
 
@@ -25,6 +40,7 @@ export default function App() {
     <>
       <Nav onOpenCart={() => setCartOpen(true)} />
       <div className="wrap page">
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Shop />} />
           <Route path="/orders" element={<MyOrders />} />
@@ -38,6 +54,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </div>
       {cartOpen && <CartDrawer onClose={() => setCartOpen(false)} />}
       <Toasts items={toasts} onDismiss={dismissToast} />

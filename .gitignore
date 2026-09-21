@@ -6,3 +6,4 @@ server/data/
 .vercel/
 .env
 .env.*
+.vercel

@@ -13,6 +13,7 @@ export function AppProvider({ children }) {
   const [booted, setBooted] = useState(false);
   const [cart, setCart] = useState(() => { try { return JSON.parse(localStorage.getItem('op_cart') || '[]'); } catch { return []; } });
   const [toasts, setToasts] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
 
   const toast = useCallback((message, type = 'info', ms = 4200) => {
     const id = ++toastId;
@@ -73,8 +74,9 @@ export function AppProvider({ children }) {
     token, user, booted, isAdmin: user?.role === 'admin',
     login, register, logout,
     cart, cartCount, inCart, addToCart, setQty, clearCart,
+    cartOpen, setCartOpen,
     toasts, dismissToast, toast,
-  }), [token, user, booted, login, register, logout, cart, cartCount, inCart, addToCart, setQty, clearCart, toasts, dismissToast, toast]);
+  }), [token, user, booted, login, register, logout, cart, cartCount, inCart, addToCart, setQty, clearCart, cartOpen, toasts, dismissToast, toast]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

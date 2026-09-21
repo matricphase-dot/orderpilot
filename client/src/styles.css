@@ -232,9 +232,18 @@ button { font-family: inherit; }
 .mut { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 12.5px; }
 
 @media (max-width: 860px) {
-  .nav-in { height: 58px; } .nav a.link { padding: 7px 10px; font-size: 13px; }
+  .nav-in { height: auto; padding: 8px 0 10px; row-gap: 8px; flex-wrap: wrap; }
+  .nav .logo { margin-right: auto; }
+  .nav a.link { padding: 7px 10px; font-size: 13px; }
+  .nav-right { flex-wrap: wrap; }
   .grid-2 { grid-template-columns: 1fr; }
   .orow { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .filters { flex: 1 1 100%; }
+  .filters .input { flex: 1; min-width: 0; }
+  .pgrid { grid-template-columns: 1fr !important; }
+  .pcard .row { flex-wrap: wrap; }
 }
 @media (max-width: 620px) { .hide-sm { display: none !important; } .pgrid { grid-template-columns: 1fr 1fr; gap: 12px; } .pthumb { height: 92px; font-size: 38px; } }
 
