@@ -1,5 +1,8 @@
 # 🛒 OrderPilot — Full-Stack E-Commerce Order Management System
 
+**🌐 Live demo: <https://orderpilot-ten.vercel.app>** · **📦 Repo: <https://github.com/matricphase-dot/orderpilot>**
+*(Deployed on Vercel — React SPA served statically, the Express API runs as a serverless function with an auto-seeding SQLite demo database. Data resets on cold starts; run locally with `./run.sh` for persistence.)*
+
 > An Intellectual-Property project: place → update → cancel → track orders through a complete lifecycle, built as a **real full-stack application** — a REST API over SQLite behind a modern React SPA, with customer and admin experiences.
 
 ![stack](https://img.shields.io/badge/React%2018-Vite%205-22d3ee) ![stack](https://img.shields.io/badge/Express%204-Node%2020-6d7cff) ![db](https://img.shields.io/badge/SQLite-WAL%20(%20better--sqlite3%20)-22c55e) ![auth](https://img.shields.io/badge/auth-scrypt%20%2B%20HMAC--JWT-f59e0b)
@@ -122,6 +125,8 @@ cd client && npm install && npm run dev
 ```
 
 Or one command from the repo root: `./run.sh`
+
+**Vercel deploy (this repo is configured for it):** `vercel deploy --prod` from the root — `vercel.json` builds the client to static assets, rewrites `/api/*` to `api/index.js`, which boots the same Express app + SQLite in `/tmp` and seeds the demo dataset on cold start. Optional: run `vercel git connect` after installing the Vercel GitHub App on your repo for auto-deploy on every push.
 
 **Production demo (single port):** `cd client && npm run build`, then `cd ../server && npm start` → everything served on `:4000`.
 
