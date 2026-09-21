@@ -77,7 +77,7 @@ users 1 ──── * orders 1 ──── * order_items * ──── 1 prod
 * `orders` carries pricing snapshot (`subtotal, discount, shipping_fee, tax, cod_fee, total`), shipping snapshot, `payment_status` (`PENDING_PAYMENT/PAID/REFUNDED`), `awb/carrier`, timestamps (`created_at, updated_at, cancelled_at, delivered_at`).
 * Line items snapshot `name` and `unit_price` at purchase time (prices can change without corrupting history).
 
-## 5. API reference (26 endpoints)
+## 5. API reference (22 endpoints — 21 in spec + health)
 
 Base URL `http://localhost:4000/api` — full machine-readable spec in [`openapi.yaml`](server/openapi.yaml), Postman collection in [`postman/OrderPilot.postman_collection.json`](postman/OrderPilot.postman_collection.json).
 

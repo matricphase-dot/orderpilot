@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: OrderPilot API
   version: 1.0.0
-  description: E-commerce order management REST API — place, update, cancel and track orders. SQLite + Express. Auth via `Authorization: Bearer <token>` (register/login returns a token).
+  description: "E-commerce order management REST API — place, update, cancel and track orders. SQLite + Express. Auth via Bearer token (register/login returns it)."
 servers: [{ url: http://localhost:4000/api }]
 tags:
   - { name: auth }
