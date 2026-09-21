@@ -2,7 +2,7 @@
   "name": "orderpilot-server",
   "version": "1.0.0",
   "private": true,
-  "description": "OrderPilot — E-Commerce Order Management REST API (Express + SQLite)",
+  "description": "OrderPilot \u2014 E-Commerce Order Management REST API (Express + SQLite)",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -11,9 +11,11 @@
     "seed": "node src/seed.js",
     "test": "node --test test/"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",
     "express": "^4.21.2"
   }
