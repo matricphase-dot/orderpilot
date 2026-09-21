@@ -216,17 +216,16 @@ r.post('/:id(\\d+)/cancel', requireAuth, (req, res) => {
 });
 
 // ── STATUS FLOW (admin; FSM-validated; generates AWB at SHIPPED) ──────────
-r.patch('/:id(\\d+)/status', requireAdmin, (req, res) => {
-  const id = asInt(req.params.id, 0);
+/** Shared transition core: validates the FSM, applies stage side-effects, appends a tracking event. */
+const applyStatus = (id, next, { note = '', actor = 'system', carrier, awb } = {}) => {
   const o = db.prepare('SELECT * FROM orders WHERE id=?').get(id);
   if (!o) throw httpError(404, 'Order not found.');
-  const next = String(req.body?.status || '').toUpperCase();
-  if (!ORDER_STATUSES.includes(next)) throw httpError(422, `Unknown status "${req.body?.status}".`, 'status');
+  if (!ORDER_STATUSES.includes(next)) throw httpError(422, `Unknown status "${next}".`, 'status');
   if (next === o.status) throw httpError(422, `Order is already "${next}".`, 'status');
   if (!NEXT_STATUS[o.status].includes(next)) {
     throw httpError(409, `Illegal transition ${o.status} → ${next}. Allowed: ${NEXT_STATUS[o.status].join(', ') || '(none — terminal)'}.`, 'status');
   }
-  const note = req.body?.note ? ` Note: ${String(req.body.note).slice(0, 200)}` : '';
+  const noteTxt = note ? ` Note: ${String(note).slice(0, 200)}` : '';
   const set = ["status=?", "updated_at=datetime('now')"];
   const args = [next];
   if (next === 'CANCELLED') {
@@ -235,13 +234,46 @@ r.patch('/:id(\\d+)/status', requireAdmin, (req, res) => {
   }
   if (next === 'DELIVERED') set.push("delivered_at=datetime('now')", `payment_status = CASE WHEN payment_status='PENDING_PAYMENT' THEN 'PAID' ELSE payment_status END`);
   if (next === 'SHIPPED') {
-    const awb = req.body?.awb || `AWB${Date.now().toString(36).toUpperCase()}`;
-    set.push('awb=?', 'carrier=COALESCE(?, carrier)'); args.push(awb, req.body?.carrier || 'Delhivery');
+    const awbNo = awb || `AWB${Date.now().toString(36).toUpperCase()}`;
+    set.push('awb=?', 'carrier=COALESCE(?, carrier)'); args.push(awbNo, carrier || 'Delhivery');
   }
   db.prepare(`UPDATE orders SET ${set.join(', ')} WHERE id=?`).run(...args, id);
-  const msg = next === 'CANCELLED' ? `${EVT.CANCELLED}${note} Stock returned to inventory; refund handled by finance.` : `${EVT[next]}${note}`;
-  addEvent(id, next, msg, `#${req.user.id} ${req.user.name}`);
-  res.json({ order: orderRow(id), message: `Order moved to ${next}.` });
+  const msg = next === 'CANCELLED' ? `${EVT.CANCELLED}${noteTxt} Stock returned to inventory; refund handled by finance.` : `${EVT[next]}${noteTxt}`;
+  addEvent(id, next, msg, actor);
+  return orderRow(id);
+};
+
+r.patch('/:id(\\d+)/status', requireAdmin, (req, res) => {
+  const id = asInt(req.params.id, 0);
+  const next = String(req.body?.status || '').toUpperCase();
+  const order = db.transaction(() => applyStatus(id, next, {
+    note: req.body?.note, carrier: req.body?.carrier, awb: req.body?.awb,
+    actor: `#${req.user.id} ${req.user.name}`,
+  }))();
+  res.json({ order, message: `Order moved to ${next}.` });
+});
+
+// ── DEMO AUTOPILOT ─ advances one fulfilment step per call (owner or admin).
+// Enabled unless DEMO_MODE=0 — for showing the full journey in interviews.
+r.post('/:id(\\d+)/autopilot', requireAuth, (req, res) => {
+  if (String(process.env.DEMO_MODE ?? '1') === '0') throw httpError(403, 'Demo autopilot is disabled on this deployment (DEMO_MODE=0).');
+  const id = asInt(req.params.id, 0);
+  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(id);
+  if (!o) throw httpError(404, 'Order not found.');
+  if (req.user.role !== 'admin' && o.customer_id !== req.user.id) throw httpError(403, 'Not your order.');
+  const path = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+  const i = path.indexOf(o.status);
+  if (i < 0) throw httpError(409, `An order that is "${o.status}" can't run the fulfilment demo.`, 'status');
+  const to = String(req.body?.to || 'DELIVERED').toUpperCase();
+  const j = path.indexOf(to);
+  if (j < 0) throw httpError(422, `Invalid target "${to}" — autopilot walks the happy path only.`, 'to');
+  if (j <= i) throw httpError(422, `"${to}" is not ahead of the current stage "${o.status}".`, 'to');
+  const next = path[i + 1];
+  const order = db.transaction(() => applyStatus(id, next, {
+    actor: `demo autopilot · #${req.user.id} ${req.user.name}`,
+    note: req.body?.note,
+  }))();
+  res.json({ order, stage: next, remaining: j - i - 1, message: `🤖 Demo: order advanced to ${next}.` });
 });
 
 export default r;

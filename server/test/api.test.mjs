@@ -82,6 +82,21 @@ ok('stock restocked on cancel', (await api('/products/2')).json.stock === s2);
 ok('cancel event logged', cx.json.order.events.at(-1).message.includes('Ordered wrong variant'));
 ok('double cancel → 409', (await api(`/orders/${cOrd.id}/cancel`, { method: 'POST', token: cust.token })).status === 409);
 
+// demo autopilot — walks the happy path one real FSM step per call
+const apOrd = (await api('/orders', { method: 'POST', token: cust.token, body: { items: [{ productId: 10, qty: 1 }], paymentMethod: 'COD', shipping: SHIP } })).json.order;
+let st = apOrd.status, guard = 0;
+while (st !== 'DELIVERED' && guard++ < 6) {
+  const rr = await api(`/orders/${apOrd.id}/autopilot`, { method: 'POST', token: cust.token, body: { to: 'DELIVERED' } });
+  if (rr.status !== 200) { ok('autopilot step from ' + st, false, JSON.stringify(rr.json)); break; }
+  st = rr.json.order.status;
+}
+ok('autopilot walks PENDING→DELIVERED', st === 'DELIVERED' && guard === 5, `(${guard} steps)`);
+const ap = (await api(`/orders/${apOrd.id}`, { token: cust.token })).json.order;
+ok('autopilot COD collects on delivery', ap.payment_status === 'PAID' && !!ap.delivered_at && !!ap.awb, `awb=${ap.awb}`);
+ok('autopilot 5 events logged', ap.events.filter(e => /autopilot/.test(e.actor)).length === 5);
+ok('autopilot at terminal → 422', (await api(`/orders/${apOrd.id}/autopilot`, { method: 'POST', token: cust.token })).status === 422);
+ok("autopilot on someone else's order → 403", (await api('/orders/1/autopilot', { method: 'POST', token: meera.token })).status === 403);
+
 // public tracking
 const trk = await api(`/orders/track/${O.order_number}`);
 ok('track masked without proof', trk.json.verified === false && !trk.json.order);

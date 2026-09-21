@@ -14,10 +14,12 @@
 ### Customer
 | Feature | Detail |
 |---|---|
-| **Place order** | Cart → live server-priced quote (coupons, GST, shipping, COD fee) → 2-step checkout → order number `OP-YYYY-NNN` |
+| **Place order** | Cart → live server-priced quote (coupons, GST, shipping, COD fee) → checkout → **demo payment gateway** (UPI QR · Luhn-validated test card · net-banking) → order `OP-YYYY-NNN` |
 | **Update order** | Edit delivery address / phone / notes while the order is `PENDING` or `CONFIRMED`; every edit is logged as a tracking event |
 | **Cancel order** | One-click cancel until the order ships — stock is restocked automatically and refunds are marked initiated |
 | **Track order** | Public tracking by order number (privacy-masked unless verified with email / phone / pincode), 6-stage animated timeline, auto-refreshing detail page |
+| **Demo payment** | Simulated gateway UI: staged processing (tokenize → authorize → 3-D Secure → approved), txn receipt `demo_txn_…`; non-COD orders land `PAID`, COD flips to `PAID` at delivery |
+| **Fulfilment demo** | One click on the order page ("🤖 Run fulfilment demo" / "🚀 Watch it ship" after payment) advances the *real* FSM one stage at a time — CONFIRMED → … → DELIVERED with AWB, events and live timeline |
 | **Auth** | Register/login, password hashing (scrypt), stateless HMAC-signed tokens, per-customer data isolation |
 
 ### Admin (fulfilment console)
@@ -75,7 +77,7 @@ users 1 ──── * orders 1 ──── * order_items * ──── 1 prod
 * `orders` carries pricing snapshot (`subtotal, discount, shipping_fee, tax, cod_fee, total`), shipping snapshot, `payment_status` (`PENDING_PAYMENT/PAID/REFUNDED`), `awb/carrier`, timestamps (`created_at, updated_at, cancelled_at, delivered_at`).
 * Line items snapshot `name` and `unit_price` at purchase time (prices can change without corrupting history).
 
-## 5. API reference (25 endpoints)
+## 5. API reference (26 endpoints)
 
 Base URL `http://localhost:4000/api` — full machine-readable spec in [`openapi.yaml`](server/openapi.yaml), Postman collection in [`postman/OrderPilot.postman_collection.json`](postman/OrderPilot.postman_collection.json).
 
@@ -93,6 +95,7 @@ Base URL `http://localhost:4000/api` — full machine-readable spec in [`openapi
 | GET | `/orders/:id` | 🔑 | Order + items + events + `next_statuses` |
 | PATCH | `/orders/:id` | 🔑 | **Update** address/notes (until CONFIRMED) / carrier+AWB (admin) |
 | POST | `/orders/:id/cancel` | 🔑 | **Cancel** (until SHIPPED) → restock + refund event |
+| POST | `/orders/:id/autopilot` | 🔑 | **Demo** one-step fulfilment advance (owner/admin, happy path; kill switch `DEMO_MODE=0`) |
 | PATCH | `/orders/:id/status` | 👑 | **Advance lifecycle** (FSM-validated) |
 | GET | `/orders/track/:orderNumber?verify=` | 🌐 | **Track** — masked until verified by email/phone/pincode |
 | GET | `/stats/overview` · `/stats/revenue-daily` · `/stats/top-products` · `/stats/funnel` | 👑 | Dashboard analytics |
@@ -143,9 +146,9 @@ Seeded DB already contains 13 orders spread across **every** lifecycle state, so
 
 ```bash
 cd server && npm start &        # API on :4000
-node test/api.test.mjs          # → 🎉 42 passed, 0 failed
+node test/api.test.mjs          # → 🎉 47 passed, 0 failed
 ```
-The suite is a black-box E2E over HTTP covering: auth + RBAC, coupon engine, stock decrement/restock, oversell rejection, FSM transitions (legal + illegal), cancel + refund flow, address updates, public tracking with privacy masking, product CRUD, and analytics correctness.
+The suite is a black-box E2E over HTTP covering (plus a Playwright UI suite for the payment flow): auth + RBAC, coupon engine, stock decrement/restock, oversell rejection, FSM transitions (legal + illegal), cancel + refund flow, address updates, public tracking with privacy masking, product CRUD, and analytics correctness.
 
 ## 8. Nice bits you can defend in a viva
 

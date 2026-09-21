@@ -161,6 +161,15 @@ paths:
         - { in: path, name: orderNumber, required: true, schema: { type: string, example: OP-2026-001 } }
         - { in: query, name: verify, schema: { type: string } }
       responses: { '200': { description: tracking view }, '404': { description: unknown order } }
+  /orders/{id}/autopilot:
+    post:
+      tags: [orders]
+      security: [{ bearerAuth: [] }]
+      summary: "Demo autopilot — advances the order one step along the fulfilment path (owner or admin). Returns the updated order + remaining steps. Disabled when DEMO_MODE=0."
+      parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { to: { type: string, enum: [CONFIRMED, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED], default: DELIVERED }, note: { type: string } } } } } }
+      responses: { '200': { description: advanced one stage }, '403': { description: not yours / demo mode off }, '409': { description: not on happy path }, '422': { description: already at/ beyond target } }
+
   /stats/overview:
     get: { tags: [stats], security: [{ bearerAuth: [] }], summary: KPI totals + status counts + catalog health, responses: { '200': { description: ok } } }
   /stats/revenue-daily:

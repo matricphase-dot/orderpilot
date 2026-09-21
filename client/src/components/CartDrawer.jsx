@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, INR } from '../api.js';
 import { useApp } from '../store.jsx';
 import { Field, Spinner } from './ui.jsx';
+import { DemoQR, CardForm, BankPicker, useGateway, PaySummary } from './pay.jsx';
 
 const PAY = [
   { id: 'UPI', label: 'UPI', icon: '📱', note: 'GPay / PhonePe / Paytm' },
@@ -20,13 +21,18 @@ export default function CartDrawer({ onClose }) {
   const [applied, setApplied] = useState('');
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
-  const [step, setStep] = useState('cart'); // cart | checkout | done
+  const [step, setStep] = useState('cart'); // cart | checkout | pay | done
   const [ship, setShip] = useState({ ...blankShip, ...(user ? { name: user.name, phone: user.phone || '' } : {}) });
   const [pay, setPay] = useState('UPI');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [placed, setPlaced] = useState(null);
+  const [upiId, setUpiId] = useState('aarav@okdemo');
+  const [bank, setBank] = useState('');
+  const [cardOk, setCardOk] = useState(false);
+  const [payRef, setPayRef] = useState('');
+  const gateway = useGateway();
 
   const items = useMemo(() => cart.map((l) => ({ productId: l.id, qty: l.qty })), [cart]);
 
@@ -68,6 +74,7 @@ export default function CartDrawer({ onClose }) {
       if (e.status === 422 && e.field === 'shipping') {
         const errs = {}; e.message.replace(/— (.*)/, '$1').split(';').forEach((p) => { const [k, v] = p.split(':'); if (k) errs[k.trim()] = (v || '').trim(); });
         setErrors(errs);
+        setStep('checkout');
       }
       toast(e.message, 'error', 6000);
     } finally { setBusy(false); }
@@ -81,11 +88,11 @@ export default function CartDrawer({ onClose }) {
 
   return (
     <Backdrop onClose={onClose}>
-      <Drawer title={step === 'cart' ? 'Your cart 🧺' : step === 'checkout' ? 'Checkout 🧾' : 'Order placed 🎉'} onBack={step === 'checkout' ? () => setStep('cart') : undefined} onClose={onClose} hideClose={step === 'done'}>
+      <Drawer title={step === 'cart' ? 'Your cart 🧺' : step === 'checkout' ? 'Shipping details 🧾' : step === 'pay' ? 'Demo payment 💳' : 'Order placed 🎉'} onBack={step === 'checkout' ? () => setStep('cart') : step === 'pay' ? () => setStep('checkout') : undefined} onClose={onClose} hideClose={step === 'done'}>
         {step === 'cart' && (
           cart.length === 0 ? <div style={{ textAlign: 'center', padding: '50px 10px' }}><div style={{ fontSize: 40 }}>🛒</div><p className="sub" style={{ margin: '12px 0 18px' }}>Nothing here yet — add some gear!</p><button className="btn" onClick={onClose}>Browse shop</button></div> :
           <>
-            <div className="steps" style={{ marginBottom: 6 }}><div className="on done">1 · Cart</div><div>2 · Shipping & pay</div><div>3 · Done</div></div>
+            <div className="steps" style={{ marginBottom: 6 }}><div className="on">1 · Cart</div><div>2 · Details</div><div>3 · Payment</div><div>4 · Done</div></div>
             {cart.map((l) => (
               <div className="cline" key={l.id}>
                 <div className="cline-emoji" style={{ background: `color-mix(in srgb, ${l.accent} 22%, transparent)` }}>{l.emoji}</div>
@@ -112,7 +119,7 @@ export default function CartDrawer({ onClose }) {
 
         {step === 'checkout' && (
           <>
-            <div className="steps" style={{ marginBottom: 6 }}><div className="done">1 · Cart</div><div className="on">2 · Shipping & pay</div><div>3 · Done</div></div>
+            <div className="steps" style={{ marginBottom: 6 }}><div className="done">1 · Cart</div><div className="on">2 · Details</div><div>3 · Payment</div><div>4 · Done</div></div>
             <b className="h3">Shipping details</b>
             <div className="grid-2 mt10">
               {F('name', 'Full name', { placeholder: 'Aarav Sharma' })}
@@ -132,10 +139,56 @@ export default function CartDrawer({ onClose }) {
               ))}
             </div>
             <QuoteBox quote={quote} quoting={quoting} />
-            <button className="btn primary block" disabled={busy || quoting || !quote} onClick={submit}>
-              {busy ? <><Spinner small /> Placing order…</> : `Place order · ${quote ? INR(quote.total) : '…'}`}
+            <button className="btn primary block" disabled={busy || quoting || !quote} onClick={() => (pay === 'COD' ? submit() : setStep('pay'))}>
+              {busy ? <Spinner small /> : pay === 'COD' ? `Place order · pay ${quote ? INR(quote.total) : '…'} on delivery` : `Continue to payment · ${quote ? INR(quote.total) : '…'}`}
             </button>
-            <p className="hint" style={{ textAlign: 'center' }}>🔒 Demo checkout — payment is simulated, no real money moves.</p>
+            <p className="hint" style={{ textAlign: 'center' }}>🔒 Demo checkout — the payment gateway below is simulated end-to-end.</p>
+          </>
+        )}
+
+        {step === 'pay' && quote && (
+          <>
+            <div className="steps" style={{ marginBottom: 6 }}><div className="done">1 · Cart</div><div className="done">2 · Details</div><div className="on">3 · Payment</div><div>4 · Done</div></div>
+            <div className="row between" style={{ padding: '10px 12px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, marginBottom: 14 }}>
+              <span className="small mut">Paying to <b style={{ color: 'var(--text)' }}>OrderPilot Demo Store</b></span>
+              <b style={{ fontSize: 15 }}>{INR(quote.total)}</b>
+            </div>
+            <div className="row" style={{ gap: 6, marginBottom: 12, justifyContent: 'center' }}>
+              {PAY.filter((p) => p.id !== 'COD').map((p) => (
+                <button key={p.id} type="button" className={`chip chip-btn ${pay === p.id ? 'on' : ''}`} style={{ padding: '7px 12px', fontSize: 12.5 }} onClick={() => setPay(p.id)}>{p.icon} {p.label}</button>
+              ))}
+            </div>
+            {pay === 'UPI' && (
+              <div style={{ textAlign: 'center' }}>
+                <DemoQR text={`upi://pay?pa=${upiId || 'demo@okhdfcbank'}&am=${quote.total}&tn=OrderPilot`} />
+                <p className="small faint" style={{ margin: '10px 0' }}>📱 “Scan” with any UPI app — the QR is simulated</p>
+                <Field label="or enter your UPI ID" hint="any value works — demo auto-approves">
+                  <input className="input mono" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="name@okbank" />
+                </Field>
+              </div>
+            )}
+            {pay === 'CARD' && <CardForm onValid={setCardOk} />}
+            {pay === 'NETBANKING' && (
+              <>
+                <b className="h3">Choose your bank</b>
+                <div className="mt10"><BankPicker bank={bank} setBank={setBank} /></div>
+              </>
+            )}
+            <div className="mt10">{gateway.ui}</div>
+            {!gateway.busy && !busy && (
+              <button className="btn primary block"
+                disabled={(pay === 'CARD' && !cardOk) || (pay === 'NETBANKING' && !bank)}
+                onClick={() => {
+                  const steps = pay === 'UPI' ? ['Opening demo UPI app…', 'Awaiting push approval…']
+                    : pay === 'CARD' ? ['Tokenizing card (PCI-safe demo)…', 'Requesting bank authorization…', '3-D Secure verified ✓']
+                    : [`Redirecting to ${bank} demo portal…`, 'Debiting savings account…'];
+                  gateway.run(steps, async () => { setPayRef(`demo_txn_${Date.now().toString(36).toUpperCase()}`); await submit(); });
+                }}>
+                Pay {INR(quote.total)} →
+              </button>
+            )}
+            {busy && !gateway.ui && <button className="btn primary block" disabled><Spinner small /> Confirming with merchant…</button>}
+            <p className="hint mt10" style={{ textAlign: 'center' }}>Simulated gateway · auto-approves in ~2s · no real money moves.</p>
           </>
         )}
 
@@ -145,10 +198,16 @@ export default function CartDrawer({ onClose }) {
             <h3 style={{ margin: '10px 0 4px' }}>Order placed!</h3>
             <p className="sub">Your order number is</p>
             <div className="mono" style={{ fontSize: 20, fontWeight: 700, margin: '8px 0', background: 'var(--grad-soft)', padding: '10px 14px', borderRadius: 12, display: 'inline-block' }}>{placed.order_number}</div>
-            <p className="small faint">Total paid <b style={{ color: 'var(--text)' }}>{INR(placed.total)}</b> · {placed.payment_method} · tracking is live below.</p>
-            <div className="row mt16" style={{ justifyContent: 'center' }}>
+            <div style={{ textAlign: 'left', display: 'grid', gap: 8, margin: '12px 0' }}>
+              {placed.payment_method === 'COD'
+                ? <div className="small mut" style={{ padding: '10px 12px', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.35)', borderRadius: 12 }}>💵 {INR(placed.total)} to pay on delivery — order is live now</div>
+                : <PaySummary total={placed.total} method={placed.payment_method} txRef={payRef} />}
+              <div className="small faint" style={{ textAlign: 'center' }}>GST {INR(placed.tax)} · shipping {placed.shipping_fee === 0 ? 'FREE' : INR(placed.shipping_fee)}{placed.discount ? ` · coupon −${INR(placed.discount)}` : ''}</div>
+            </div>
+            <div className="row mt10" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn" onClick={onClose}>Keep shopping</button>
-              <button className="btn primary" onClick={() => { onClose(); nav(`/orders/${placed.id}`); }}>Track this order →</button>
+              <button className="btn" onClick={() => { onClose(); nav(`/orders/${placed.id}`); }}>Track this order</button>
+              <button className="btn ok" onClick={() => { onClose(); nav(`/orders/${placed.id}`, { state: { autoplay: true } }); }}>🚀 Watch it ship (demo)</button>
             </div>
           </div>
         )}

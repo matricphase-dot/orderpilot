@@ -1,21 +1,50 @@
 // OrderPilot — order detail: full tracking timeline, cancel flow, address editor, admin ops
-import { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { api, INR, dt, NEXT, STATUS_META } from '../api.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { api, INR, dt, NEXT, STATUS_META, STAGES } from '../api.js';
 import { useApp } from '../store.jsx';
 import Timeline from '../components/Timeline.jsx';
 import { StatusChip, Progress, Modal, Field, Spinner, Empty } from '../components/ui.jsx';
 
 const CANCEL_REASONS = ['Ordered by mistake', 'Found a better price', 'Delivery is too slow', 'Wrong address / contact', 'Payment issue'];
+const isTerminal = (s) => s === 'DELIVERED' || s === 'CANCELLED';
 
 export default function OrderDetail() {
   const { id } = useParams();
   const { token, toast, user, isAdmin } = useApp();
   const nav = useNavigate();
+  const location = useLocation();
   const [order, setOrder] = useState(null);
   const [err, setErr] = useState(null);
-  const [modal, setModal] = useState(null); // 'cancel' | 'edit' | 'status'
+  const [modal, setModal] = useState(null); // 'cancel' | 'edit' | 'status' | 'carrier'
   const [busy, setBusy] = useState(false);
+  const [autoRun, setAutoRun] = useState(false);
+  const autoStarted = useRef(false);
+
+  const runAutopilot = useCallback(async (startOrder) => {
+    if (autoRun) return;
+    setAutoRun(true);
+    let cur = startOrder;
+    while (cur && !isTerminal(cur.status)) {
+      await new Promise((r) => setTimeout(r, 1400));
+      try {
+        const r = await api.autopilot(cur.id, 'DELIVERED', token);
+        cur = r.order; setOrder(cur);
+        toast(r.message, 'success', 1900);
+        if (cur.status === 'SHIPPED') toast(`🚚 ${cur.carrier} AWB ${cur.awb} — label attached`, 'info', 2600);
+        if (cur.status === 'DELIVERED') toast('🎉 Delivered! Journey complete — payment' + (cur.payment_status === 'PAID' ? ' captured' : ' collected') + '.', 'success', 5200);
+      } catch (e) { toast(e.message, 'warn', 3800); break; }
+    }
+    setAutoRun(false);
+  }, [autoRun, token]); // eslint-disable-line
+
+  // autoplay arrival (from checkout "Watch it ship") runs the demo once
+  useEffect(() => {
+    if (location.state?.autoplay && order && !isTerminal(order.status) && !autoStarted.current) {
+      autoStarted.current = true;
+      runAutopilot(order);
+    }
+  }, [location.state?.autoplay, order?.status]); // eslint-disable-line
 
   const load = useCallback(() => {
     api.getOrder(id, token).then((r) => { setOrder(r.order); setErr(null); })
@@ -44,6 +73,13 @@ export default function OrderDetail() {
     if (o.can_cancel) actions.push(<button key="cx" className="btn danger sm" onClick={() => setModal({ kind: 'cancel' })}>Cancel order</button>);
     if (o.can_edit) actions.push(<button key="ed" className="btn sm" onClick={() => setModal({ kind: 'edit' })}>✏️ Update address</button>);
     actions.push(<button key="tr" className="btn ghost sm" onClick={() => nav(`/track?n=${o.order_number}`)}>📮 Public tracking link</button>);
+  }
+  if (STAGES.includes(o.status) && !isTerminal(o.status)) {
+    actions.push(
+      <button key="demo" className="btn sm" style={{ borderColor: 'rgba(34,211,238,.45)', color: '#22d3ee' }} disabled={autoRun} onClick={() => runAutopilot(o)}>
+        {autoRun ? <><Spinner small /> Parcels moving…</> : '🤖 Run fulfilment demo'}
+      </button>
+    );
   }
 
   const summary = [['Subtotal', INR(o.subtotal)]];

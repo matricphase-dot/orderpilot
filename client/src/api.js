@@ -41,6 +41,7 @@ export const api = {
   updateOrder: (id, b, t) => req(`/orders/${id}`, { method: 'PATCH', body: b, token: t }),
   cancelOrder: (id, reason, t) => req(`/orders/${id}/cancel`, { method: 'POST', body: { reason }, token: t }),
   setStatus: (id, b, t) => req(`/orders/${id}/status`, { method: 'PATCH', body: b, token: t }),
+  autopilot: (id, to, t) => req(`/orders/${id}/autopilot`, { method: 'POST', body: { to: to || 'DELIVERED' }, token: t }),
   trackPublic: (num, verify) => req('/orders/track/' + encodeURIComponent(num) + q({ verify })),
   // admin stats
   overview: (t) => req('/stats/overview', { token: t }),
